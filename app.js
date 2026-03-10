@@ -204,12 +204,18 @@ function getNested(obj, path) {
         if (current !== undefined) return current;
     }
 
-    // 3. Try camelCase fallback (hair_color -> hairColor)
+    // 3. Try leaf key directly for flat structures (hair.hair_color -> hair_color)
+    if (parts.length > 1) {
+        const leafKey = parts[parts.length - 1];
+        if (target[leafKey] !== undefined) return target[leafKey];
+    }
+
+    // 4. Try camelCase fallback (hair_color -> hairColor)
     const camelPath = path.includes('.') ? parts[parts.length - 1] : path;
     const camelKey = camelPath.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
     if (target[camelKey] !== undefined) return target[camelKey];
 
-    // 4. Specific known aliases
+    // 5. Specific known aliases
     const aliases = {
         'gender': ['attributeGender'],
         'age_group': ['ageGroup'],
@@ -248,17 +254,22 @@ function setNested(obj, path, value) {
         return;
     }
 
-    // 3. Nested structure
+    // 3. For dotted paths, check if the leaf key exists as a flat key first
     let parts = path.split('.');
+    const leafKey = parts[parts.length - 1];
+    if (target[leafKey] !== undefined) {
+        target[leafKey] = value;
+        return;
+    }
 
-    // Check if flat camelCase key exists even for nested path (hair.hair_color -> hairColor)
-    const camelKey = parts[parts.length - 1].replace(/_([a-z])/g, (g) => g[1].toUpperCase());
+    // 4. Check if flat camelCase key exists (hair.hair_color -> hairColor)
+    const camelKey = leafKey.replace(/_([a-z])/g, (g) => g[1].toUpperCase());
     if (target[camelKey] !== undefined) {
         target[camelKey] = value;
         return;
     }
 
-    // Standard nested setting
+    // 5. Standard nested setting
     const lastKey = parts.pop();
     const lastObj = parts.reduce((prev, curr) => {
         if (!prev[curr]) prev[curr] = {};
@@ -308,8 +319,29 @@ function connectWebSocket() {
         ws.onmessage = (e) => {
             try {
                 const raw = JSON.parse(e.data);
-                const mmEvent = raw.mmEvent || raw; // Handle wrapper
-                console.log('Received mmEvent (queued):', mmEvent);
+                console.log('Raw WS message:', raw);
+
+                // Backend sends: { profile_id, name, image_url, image_attributes }
+                // Normalise into the flat structure the rest of the app expects
+                let mmEvent;
+                if (raw.image_attributes) {
+                    mmEvent = { ...raw.image_attributes };
+                    // Ensure personId is set (backend uses profile_id)
+                    if (!mmEvent.personId && !mmEvent.person_id) {
+                        mmEvent.personId = raw.profile_id;
+                    }
+                    // Pull image_url and name from the top-level message
+                    if (!mmEvent.image_url && raw.image_url) {
+                        mmEvent.image_url = raw.image_url;
+                    }
+                    if (!mmEvent.name && raw.name) {
+                        mmEvent.name = raw.name;
+                    }
+                } else {
+                    mmEvent = raw.mmEvent || raw; // Fallback for other formats
+                }
+
+                console.log('Processed mmEvent (queued):', mmEvent);
                 enqueueEvent(mmEvent);
             } catch (err) {
                 console.error('Failed to parse WebSocket message:', err);
@@ -514,7 +546,13 @@ function renderAttributes(id) {
         const currentVal = getNested(current, key) || '';
         const originalVal = getNested(original, key) || '';
         const isModified = currentVal !== originalVal;
-        const options = ATTRIBUTE_OPTIONS[key];
+        let options = [...ATTRIBUTE_OPTIONS[key]];
+
+        // If the current value exists but isn't in the predefined options, add it
+        // so the dropdown can display it (handles AI model values like "None", "20-25", "Brown", etc.)
+        if (currentVal && !options.some(opt => opt.toLowerCase() === currentVal.toLowerCase())) {
+            options.push(currentVal);
+        }
 
         const optionsHtml = options.map(opt => {
             const selected = opt.toLowerCase() === (currentVal || '').toLowerCase() ? 'selected' : '';
@@ -763,7 +801,7 @@ function loadSampleData() {
     };
 
     // Use the absolute path for the generated image for local preview
-    sample.image_url = "file:///home/akshayagv/.gemini/antigravity/brain/55cd86b4-8037-45f4-b625-c0750911aa7e/asian_male_40_45_profile_1773064619577.png";
+    nestedSample.image_url = "https://raw.githubusercontent.com/akshayagv/Match_making_atrributes_ui/main/asian_male_40_45_profile_1773064619577.png";
 
     // Add the new flat profile
     const flatSample = {

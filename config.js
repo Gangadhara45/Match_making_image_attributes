@@ -13,9 +13,6 @@ const API_BASE_URL = 'http://127.0.0.1:8002'; // e.g. 'http://localhost:8000' or
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 
 const CONFIG = {
-    /* ── SSE → WebSocket endpoint ── */
-    WS_ENDPOINT: `${WS_BASE_URL}/api/v1/basic/ws/mm-events`,
-
-    /* ── REST endpoint – sends updated attribute payload ── */
-    UPDATE_ENDPOINT: `${API_BASE_URL}/api/v1/basic/mm-events/update`,
+  WS_ENDPOINT: `${WS_BASE_URL}/api/v1/basic/ws/image-attributes`,
+  UPDATE_ENDPOINT: `${API_BASE_URL}/api/v1/basic/profile/update-attributes`,
 };
