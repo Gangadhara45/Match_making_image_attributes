@@ -287,6 +287,7 @@ let eventCards = {}; // keyed by personId
 let ws = null;
 let wsReconnectDelay = 1000; // ms, doubles on each failure (max 16 s)
 let wsReconnectTimer = null;
+let heartbeatInterval = null;
 let eventQueue = [];
 
 // ── DOM refs ──
@@ -300,8 +301,29 @@ const batchCount = document.getElementById('batchCount');
 const sidebar = document.getElementById('sidebar');
 
 // ── WebSocket Connection ──
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(() => {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
+        }
+    }, 30000); // Send ping every 30 seconds
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
 function connectWebSocket() {
     if (ws) {
+        stopHeartbeat();
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
         ws.close();
         ws = null;
     }
@@ -314,6 +336,7 @@ function connectWebSocket() {
             setConnectionStatus(true);
             showToast('Connected to WebSocket', 'success');
             wsReconnectDelay = 1000; // reset backoff on successful connect
+            startHeartbeat();
         };
 
         ws.onmessage = (e) => {
@@ -355,6 +378,8 @@ function connectWebSocket() {
 
         ws.onclose = () => {
             setConnectionStatus(false);
+            stopHeartbeat();
+
             // Auto-reconnect with exponential backoff (max 16 s)
             wsReconnectDelay = Math.min(wsReconnectDelay * 2, 16000);
             console.log(`WebSocket closed. Reconnecting in ${wsReconnectDelay / 1000}s…`);
@@ -951,7 +976,8 @@ async function handleEmailVerify() {
         }
     } catch (err) {
         console.error('Email verify failed:', err);
-        showAuthError(emailError, 'Connection failed. Please check if the server is running.');
+        const errorMsg = err.message || 'Unknown error';
+        showAuthError(emailError, `Connection failed: ${errorMsg}. Check console for details.`);
     } finally {
         emailVerifyBtn.disabled = false;
         emailSpinner.classList.add('hidden');
@@ -960,7 +986,9 @@ async function handleEmailVerify() {
 
 function showOtpScreen(email) {
     // Show OTP screen
-    otpEmailDisplay.textContent = email;
+    if (otpEmailDisplay) {
+        otpEmailDisplay.textContent = email;
+    }
     showScreen('otpScreen');
 
     // Clear OTP inputs

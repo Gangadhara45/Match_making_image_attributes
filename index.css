@@ -258,8 +258,8 @@ body::before {
 
 /* ── Sidebar ── */
 .sidebar {
-    width: 320px;
-    min-width: 320px;
+    width: 280px;
+    min-width: 280px;
     background: rgba(10, 14, 26, 0.4);
     border-right: 1px solid var(--border-subtle);
     backdrop-filter: blur(20px);
@@ -307,9 +307,9 @@ body::before {
 /* Sidebar Item */
 .sidebar-item {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 16px;
     background: var(--bg-glass);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
@@ -343,11 +343,13 @@ body::before {
 }
 
 .sidebar-profile-img {
-    width: 48px;
-    height: 48px;
-    border-radius: 10px;
+    width: 75px;
+    height: 94px;
+    border-radius: 12px;
     object-fit: cover;
+    object-position: center top;
     border: 1px solid rgba(255, 255, 255, 0.1);
+    flex-shrink: 0;
 }
 
 .sidebar-profile-info {
@@ -533,9 +535,9 @@ body::before {
 
 /* ── Identity Card (Image) ── */
 .identity-card {
-    width: 320px;
-    min-width: 320px;
-    height: 420px;
+    width: 280px;
+    min-width: 280px;
+    height: 350px;
     overflow: hidden;
     border-radius: 24px;
 }
@@ -556,6 +558,7 @@ body::before {
     display: block;
     border-radius: 24px;
     transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    background: #000;
 }
 
 .identity-card:hover .identity-image {
@@ -976,9 +979,19 @@ body::before {
 }
 
 @keyframes orbFloat {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(30px, -20px) scale(1.05); }
-    66% { transform: translate(-20px, 15px) scale(0.95); }
+
+    0%,
+    100% {
+        transform: translate(0, 0) scale(1);
+    }
+
+    33% {
+        transform: translate(30px, -20px) scale(1.05);
+    }
+
+    66% {
+        transform: translate(-20px, 15px) scale(0.95);
+    }
 }
 
 /* Auth card */
@@ -1005,6 +1018,7 @@ body::before {
         opacity: 0;
         transform: translateY(30px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -1096,11 +1110,27 @@ body::before {
 }
 
 @keyframes shakeIn {
-    0%, 100% { transform: translateX(0); }
-    20% { transform: translateX(-8px); }
-    40% { transform: translateX(6px); }
-    60% { transform: translateX(-4px); }
-    80% { transform: translateX(2px); }
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-8px);
+    }
+
+    40% {
+        transform: translateX(6px);
+    }
+
+    60% {
+        transform: translateX(-4px);
+    }
+
+    80% {
+        transform: translateX(2px);
+    }
 }
 
 /* Auth button */
@@ -1132,7 +1162,7 @@ body::before {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
     transition: left 0.5s;
 }
 
@@ -1158,7 +1188,7 @@ body::before {
 .auth-btn-spinner {
     width: 18px;
     height: 18px;
-    border: 2px solid rgba(255,255,255,0.3);
+    border: 2px solid rgba(255, 255, 255, 0.3);
     border-top-color: white;
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
@@ -1286,6 +1316,7 @@ body::before {
         opacity: 0;
         transform: translateY(-10px) scale(0.95);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
