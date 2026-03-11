@@ -669,6 +669,11 @@ async function sendUpdate(cardId) {
     if (!data) return;
 
     const payload = flattenForBackend(data.current);
+    // Attach moderator email from the authenticated session
+    const moderatorEmail = sessionStorage.getItem('mm_user_email');
+    if (moderatorEmail) {
+        payload.moderator = moderatorEmail;
+    }
     const btn = document.querySelector(`#card-${cardId} .btn-primary-sm`);
 
     // Show loading
@@ -884,8 +889,223 @@ function showEmptyState() {
     emptyState.style.display = 'flex';
 }
 
+// ── Auth State ──
+let generatedOtp = null;
+let pendingEmail = null;
+
+// ── Auth DOM refs ──
+const emailScreen = document.getElementById('emailScreen');
+const otpScreen = document.getElementById('otpScreen');
+const dashboardScreen = document.getElementById('dashboardScreen');
+const emailInput = document.getElementById('emailInput');
+const emailVerifyBtn = document.getElementById('emailVerifyBtn');
+const emailError = document.getElementById('emailError');
+const emailSpinner = document.getElementById('emailSpinner');
+const otpInputs = document.querySelectorAll('.otp-digit');
+const otpVerifyBtn = document.getElementById('otpVerifyBtn');
+const otpError = document.getElementById('otpError');
+const otpEmailDisplay = document.getElementById('otpEmailDisplay');
+const otpResendBtn = document.getElementById('otpResendBtn');
+const profileAvatar = document.getElementById('profileAvatar');
+const profileAvatarLetter = document.getElementById('profileAvatarLetter');
+const profileDropdown = document.getElementById('profileDropdown');
+const profileDropdownLetter = document.getElementById('profileDropdownLetter');
+const profileDropdownEmail = document.getElementById('profileDropdownEmail');
+const logoutBtn = document.getElementById('logoutBtn');
+
+// ── Screen Management ──
+function showScreen(screenId) {
+    emailScreen.classList.add('hidden');
+    otpScreen.classList.add('hidden');
+    dashboardScreen.classList.add('hidden');
+    document.getElementById(screenId).classList.remove('hidden');
+}
+
+// ── Email Verification ──
+async function handleEmailVerify() {
+    const email = emailInput.value.trim().toLowerCase();
+    if (!email || !email.includes('@')) {
+        showAuthError(emailError, 'Please enter a valid email address');
+        return;
+    }
+
+    // Show loading
+    emailVerifyBtn.disabled = true;
+    emailSpinner.classList.remove('hidden');
+    emailError.classList.add('hidden');
+
+    try {
+        const res = await fetch(CONFIG.EMAIL_VERIFY_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+
+        const data = await res.json();
+
+        if (data.status === 'success' && data.verified) {
+            pendingEmail = email;
+            showOtpScreen(email);
+        } else {
+            showAuthError(emailError, 'This email is not authorized. Please contact admin.');
+        }
+    } catch (err) {
+        console.error('Email verify failed:', err);
+        showAuthError(emailError, 'Connection failed. Please check if the server is running.');
+    } finally {
+        emailVerifyBtn.disabled = false;
+        emailSpinner.classList.add('hidden');
+    }
+}
+
+function showOtpScreen(email) {
+    // Show OTP screen
+    otpEmailDisplay.textContent = email;
+    showScreen('otpScreen');
+
+    // Clear OTP inputs
+    otpInputs.forEach(inp => {
+        inp.value = '';
+        inp.classList.remove('filled');
+    });
+    otpInputs[0].focus();
+}
+
+// ── OTP Verification (any 4-digit number is accepted) ──
+function handleOtpVerify() {
+    const enteredOtp = Array.from(otpInputs).map(inp => inp.value).join('');
+
+    if (enteredOtp.length === 4) {
+        // Any 4 digits → success
+        sessionStorage.setItem('mm_user_email', pendingEmail);
+        enterDashboard(pendingEmail);
+    }
+}
+
+function enterDashboard(email) {
+    showScreen('dashboardScreen');
+
+    // Update profile icon
+    const letter = email.charAt(0).toUpperCase();
+    profileAvatarLetter.textContent = letter;
+    profileDropdownLetter.textContent = letter;
+    profileDropdownEmail.textContent = email;
+
+    // Connect WebSocket only after auth
+    connectWebSocket();
+}
+
+// ── OTP Input Auto-focus Behavior ──
+function setupOtpInputs() {
+    otpInputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            const val = e.target.value.replace(/\D/g, ''); // Only digits
+            e.target.value = val.charAt(0) || '';
+
+            if (val && index < otpInputs.length - 1) {
+                otpInputs[index + 1].focus();
+            }
+
+            // Toggle filled class
+            e.target.classList.toggle('filled', !!val);
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !input.value && index > 0) {
+                otpInputs[index - 1].focus();
+                otpInputs[index - 1].value = '';
+                otpInputs[index - 1].classList.remove('filled');
+            }
+            if (e.key === 'Enter') {
+                handleOtpVerify();
+            }
+        });
+
+        // Handle paste
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pasted = (e.clipboardData.getData('text') || '').replace(/\D/g, '').slice(0, 4);
+            pasted.split('').forEach((char, i) => {
+                if (otpInputs[i]) {
+                    otpInputs[i].value = char;
+                    otpInputs[i].classList.add('filled');
+                }
+            });
+            if (pasted.length > 0) {
+                const focusIdx = Math.min(pasted.length, otpInputs.length - 1);
+                otpInputs[focusIdx].focus();
+            }
+        });
+    });
+}
+
+// ── Profile Dropdown ──
+function setupProfileDropdown() {
+    profileAvatar.addEventListener('click', (e) => {
+        e.stopPropagation();
+        profileDropdown.classList.toggle('hidden');
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener('click', (e) => {
+        if (!profileDropdown.classList.contains('hidden') &&
+            !profileDropdown.contains(e.target) &&
+            e.target !== profileAvatar) {
+            profileDropdown.classList.add('hidden');
+        }
+    });
+
+    logoutBtn.addEventListener('click', () => {
+        sessionStorage.removeItem('mm_user_email');
+        generatedOtp = null;
+        pendingEmail = null;
+
+        // Disconnect WebSocket
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        clearTimeout(wsReconnectTimer);
+
+        // Reset and show email screen
+        emailInput.value = '';
+        emailError.classList.add('hidden');
+        profileDropdown.classList.add('hidden');
+        showScreen('emailScreen');
+        showToast('Logged out successfully', 'info');
+    });
+}
+
+// ── Auth Error Helper ──
+function showAuthError(el, msg) {
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
 // ── Init ──
 document.addEventListener('DOMContentLoaded', () => {
     loadSampleBtn.addEventListener('click', loadSampleData);
-    connectWebSocket();
+
+    // Setup auth event listeners
+    emailVerifyBtn.addEventListener('click', handleEmailVerify);
+    emailInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') handleEmailVerify();
+    });
+    otpVerifyBtn.addEventListener('click', handleOtpVerify);
+    otpResendBtn.addEventListener('click', () => {
+        if (pendingEmail) {
+            showOtpScreen(pendingEmail);
+            showToast('New OTP generated!', 'success');
+        }
+    });
+    setupOtpInputs();
+    setupProfileDropdown();
+
+    // Auth gate: check if already logged in
+    const savedEmail = sessionStorage.getItem('mm_user_email');
+    if (savedEmail) {
+        enterDashboard(savedEmail);
+    } else {
+        showScreen('emailScreen');
+    }
 });
